@@ -18,9 +18,6 @@ library(tidyverse)
 source(file = "00_scripts/stock_analysis_functions.R")
 
 stock_list_tbl <- get_stock_list("SP500")
-# stock_data_tbl <- get_stock_data("AAPL",
-#                                  from = "2019-01-01",
-#                                  to = "2019-06-30")
 
 # UI ----
 
@@ -59,22 +56,19 @@ ui <- fluidPage(
                label = "Analyze",
                icon = icon("download")
                ),
-             textOutput(outputId = "selected_symbol")
-             )
+             hr(),
+             sliderInput(inputId = "mavg_short", label = "Short moving average",
+                         min = 5, max = 40, value = 20),
+             sliderInput(inputId = "mavg_long", label = "Long moving average",
+                         min = 50, max = 120, value = 50)),
            ),
     column(width = 8,
            div(
-             div(h4("The selected stock is ...",
-                    textOutput(
-                      outputId = "plot_header"
-                    )), #,
-                 # stock_data_tbl %>% plot_stock_data()
-                 verbatimTextOutput(
-                   outputId = "stock_data_tbl"
+             div(h4(textOutput(outputId = "plot_header")),
+                 plotlyOutput(outputId = "plot_plotly")
                  )
-                 )
-           ))
-  ),
+             ))
+    ),
   
   # 3.0 ANALYST COMMENTARY ----
   
@@ -83,9 +77,7 @@ ui <- fluidPage(
       width = 12,
       div(
         div(h4("Analyst Commentary")),
-        div(
-          # stock_data_tbl %>% generate_commentary(user_input = "Placeholder")
-          )
+        div(textOutput(outputId = "analyst_commentary"))
       )
     )
   )
@@ -106,7 +98,17 @@ server <- function(input, output, session) {
     ignoreNULL = FALSE
   )
   
-  output$selected_symbol <- renderText(stock_symbol())
+  # GET STOCK DATA ----
+  
+  stock_data_tbl <- reactive(
+    stock_symbol() %>% 
+      get_stock_data(
+        from = today() - days(180),
+        to = today(),
+        mavg_short = input$mavg_short, # eventReactive if we want to trigger the update via the Analyze button
+        mavg_long = input$mavg_long # eventReactive if we want to trigger the update via the Analyze button
+      )
+  )
   
   # PLOT TITLE ----
   
@@ -118,21 +120,23 @@ server <- function(input, output, session) {
     ignoreNULL = FALSE
   )
   
-  output$plot_header <- renderText(plot_header())
-  
-  # GET STOCK DATA ----
-  
-  stock_data_tbl <- reactive(
-    stock_symbol() %>% 
-      get_stock_data(
-        from = today() - days(180),
-        to = today(),
-        mavg_short = 20,
-        mavg_long = 50
-    )
+  output$plot_header <- eventReactive(
+    eventExpr = input$analyze,
+    input$stock_selection,
+    ignoreNULL = FALSE
   )
   
-  output$stock_data_tbl <- renderPrint(stock_data_tbl())
+  # PLOT ----
+  
+  output$plot_plotly <- renderPlotly({
+    stock_data_tbl() %>% plot_stock_data()
+  })
+  
+  # ANALYST COMMENTARY ----
+  
+  output$analyst_commentary <- renderText({
+    generate_commentary(data = stock_data_tbl(), user_input = plot_header())
+  })
   
 }
 
