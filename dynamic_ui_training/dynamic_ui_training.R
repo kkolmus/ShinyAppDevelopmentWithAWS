@@ -132,8 +132,8 @@ ui <- fixedPage(
         ),
         column(
             width = 8,
-            verbatimTextOutput(outputId = "test")
-            
+            verbatimTextOutput(outputId = "test"),
+            uiOutput(outputId = "multi_card")
         )
         
     ),
@@ -192,17 +192,67 @@ server <- function(input, output, session) {
     )
     
     output$test <- renderPrint({
-        reactive_values$favorites_tbl
+        if (nrow(reactive_values$favorites_tbl) > 0) {
+            reactive_values$favorites_tbl   
+        } 
     })
     
     # 2.2 Rendering Multiple Items (tagList & map) ----
-    
+    output$multi_card <- renderUI({
+        if (nrow(reactive_values$favorites_tbl) > 0) {
+            
+            reactive_values$favorites_tbl %>% 
+                # Split row-wise into a list
+                mutate(id = as_factor(id)) %>%
+                split(.$id) %>%
+            
+                # Map to data in the list to the info card elements
+                map(.f = function(data) {
+                    column(
+                        width = 4,
+                        info_card(
+                            title = data$sales_metric,
+                            value = data$sales_region,
+                            sub_value = data$metric_value,
+                            sub_icon = ifelse(
+                                data$metric_value > 0, 
+                                "arrow-up",
+                                "arrow-down"
+                            ),
+                            sub_text_color = ifelse(
+                                data$metric_value > 0,
+                                "success",
+                                "danger"
+                            )
+                        ) 
+                    ) %>% tagList()
+                })
+            
+            # tagList(
+            #     p("Placeholder 1"),
+            #     p("Placeholder 2")
+            # )
+        }
+    })
     
     # 2.3 Rendering Inputs Items ----
-    
+    output$drop_list <- renderUI({
+        if (nrow(reactive_values$favorites_tbl) > 0) {
+            selectInput(
+                inputId = "drop_item",
+                label = "Element to delete",
+                choices = reactive_values$favorites_tbl %>% pull(id)
+            )
+        }
+    })
     
     # 2.4 Delete Item ----
-    
+    observeEvent(input$drop_card, {
+        if (nrow(reactive_values$favorites_tbl) > 0) {
+            reactive_values$favorites_tbl <- reactive_values$favorites_tbl %>%
+                filter(!(id %in% input$drop_item))
+        }
+    })
     
 }
 
