@@ -78,11 +78,11 @@ ui <- navbarPage(
                 )
             ),
             div(
-                class = "",
-                id = "favorite_cards",
+                class = "row",
+                id = "favorite_cards_section",
                 verbatimTextOutput(outputId = "favorites_print"), 
                 # generate_favorite_cards(favorites = current_user_favorites),
-                uiOutput(outputId = "favorite_cards")
+                uiOutput(outputId = "favorite_cards", class = "container")
                 # column(
                 #     width = 3,
                 #     info_card(title     = "AAPL", 
@@ -96,7 +96,7 @@ ui <- navbarPage(
                 #               sub_value = "-20%", 
                 #               sub_icon  = "arrow-down", 
                 #               sub_text_color = "danger")
-                )
+                ) # %>% hidden()
         ),
         
         # 3.0 APPLICATION UI -----
@@ -223,7 +223,7 @@ server <- function(input, output, session) {
     reactive_values <- reactiveValues()
     reactive_values$favorites_list <- current_user_favorites
     
-    output$favorites_print <- renderPrint(reactive_values$favorites_list)
+    # output$favorites_print <- renderPrint(reactive_values$favorites_list)
     
     # 2.2. Add favorites ----
     observeEvent(input$favorites_add, {
@@ -234,15 +234,75 @@ server <- function(input, output, session) {
     
     # 2.3. Render favorite cards ----
     output$favorite_cards <- renderUI({
-        generate_favorite_cards(
-            favorites = reactive_values$favorites_list,
-            from = today() - days(180), 
-            to   = today(),
-            mavg_short = input$mavg_short,
-            mavg_long  = input$mavg_long
-        )
+        
+        if (length(reactive_values$favorites_list) > 0) {
+            generate_favorite_cards(
+                favorites = reactive_values$favorites_list,
+                from = today() - days(180), 
+                to   = today(),
+                mavg_short = input$mavg_short,
+                mavg_long  = input$mavg_long
+            )
+        }
+        
     })
     
+    # 2.4. Delete favorites ----
+    observeEvent(input$favorites_clear, {
+        modalDialog(
+            title = "Clear Favorites",
+            size = "m",
+            easyClose = TRUE,
+            p("Are you sure you want to remove favorites?"),
+            br(),
+            div(
+               selectInput(
+                   inputId = "drop_list",
+                   label = "Remove Single Favorite",
+                   choices = reactive_values$favorites_list %>% sort()
+               ),
+               actionButton(
+                   inputId = "rm_single_favorite",
+                   label = "Remove single favorite",
+                   class = "btn-warning"
+               ),
+               actionButton(
+                   inputId = "rm_all_favorites",
+                   label = "Remove ALL favorite",
+                   class = "btn-danger"
+               )
+            ),
+            footer = modalButton("Exit")
+        ) %>%
+            showModal()
+    })
+    
+    # 2.4.1. rm_single_favorite 
+    observeEvent(input$rm_single_favorite, {
+        reactive_values$favorites_list <- reactive_values$favorites_list %>%
+            .[reactive_values$favorites_list != input$drop_list]
+            
+        updateSelectInput(
+            session = session,
+            inputId = "drop_list",
+            choices = reactive_values$favorites_list %>% sort())
+    })
+    
+    # 2.4.2. rm_all_favorites 
+    observeEvent(input$rm_all_favorites, {
+        reactive_values$favorites_list <- NULL
+        
+        updateSelectInput(
+            session = session,
+            inputId = "drop_list",
+            choices = reactive_values$favorites_list)
+    })
+    
+    # 2.5. Show/Hide favorites
+    
+    observeEvent(input$favorites_toggle, {
+        toggle(id = "favorite_cards_section", anim = TRUE, animType = "slide")
+    })
     
 }
 
