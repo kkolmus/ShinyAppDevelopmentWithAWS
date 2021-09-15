@@ -19,8 +19,11 @@ library(tidyverse)
 
 source(file = "00_scripts/stock_analysis_functions.R")
 source(file = "00_scripts/info_card.R")
+source(file = "00_scripts/generate_favorite_cards.R")
 
 stock_list_tbl <- get_stock_list("SP500")
+
+current_user_favorites <- c("AAPL", "GOOG", "NFLX")
 
 # UI ----
 ui <- navbarPage(
@@ -60,27 +63,40 @@ ui <- navbarPage(
                 class = "",
                 column(
                     width = 12,
-                    h5("Favorites")
+                    h5(
+                        class = "pull-left", 
+                        "Favorites"
+                    ),
+                    actionButton(
+                        inputId = "favorites_clear", 
+                        label = "Clear Favorites", 
+                        class = "pull-right"),
+                    actionButton(
+                        inputId = "favorites_toggle", 
+                        label = "Show/Hide", 
+                        class = "pull-right")
                 )
             ),
             div(
                 class = "",
                 id = "favorite_cards",
-                column(
-                    width = 3,
-                    info_card(title     = "AAPL", 
-                              value     = HTML("20-Day <small>vs 50-Day</small>"), 
-                              sub_value = "20%")
-                ),
-                column(
-                    width = 3,
-                    info_card(title     = "NFLX", 
-                              value     = HTML("20-Day <small>vs 50-Day</small>"), 
-                              sub_value = "-20%", 
-                              sub_icon  = "arrow-down", 
-                              sub_text_color = "danger")
+                verbatimTextOutput(outputId = "favorites_print"), 
+                # generate_favorite_cards(favorites = current_user_favorites),
+                uiOutput(outputId = "favorite_cards")
+                # column(
+                #     width = 3,
+                #     info_card(title     = "AAPL", 
+                #               value     = HTML("20-Day <small>vs 50-Day</small>"), 
+                #               sub_value = "20%")
+                # ),
+                # column(
+                #     width = 3,
+                #     info_card(title     = "NFLX", 
+                #               value     = HTML("20-Day <small>vs 50-Day</small>"), 
+                #               sub_value = "-20%", 
+                #               sub_icon  = "arrow-down", 
+                #               sub_text_color = "danger")
                 )
-            )
         ),
         
         # 3.0 APPLICATION UI -----
@@ -110,6 +126,7 @@ ui <- navbarPage(
                         actionButton(inputId = "analyze", label = "Analyze", icon = icon("download")),
                         div(
                             class = "pull-right",
+                            actionButton(inputId = "favorites_add", label = NULL, icon = icon("heart")),
                             actionButton(inputId = "settings_toggle", label = NULL, icon = icon("cog"))
                         )
                     ),
@@ -199,6 +216,33 @@ server <- function(input, output, session) {
     output$analyst_commentary <- renderText({
         generate_commentary(data = stock_data_tbl(), user_input = stock_selection_triggered())
     })
+    
+    # 2.0. Favorites ----
+    
+    # 2.1. Reactive values = User favorites ----
+    reactive_values <- reactiveValues()
+    reactive_values$favorites_list <- current_user_favorites
+    
+    output$favorites_print <- renderPrint(reactive_values$favorites_list)
+    
+    # 2.2. Add favorites ----
+    observeEvent(input$favorites_add, {
+        new_symbol <- get_symbol_from_user_input(input$stock_selection)
+        reactive_values$favorites_list <- c(reactive_values$favorites_list, 
+                                            new_symbol) %>% unique()
+    })
+    
+    # 2.3. Render favorite cards ----
+    output$favorite_cards <- renderUI({
+        generate_favorite_cards(
+            favorites = reactive_values$favorites_list,
+            from = today() - days(180), 
+            to   = today(),
+            mavg_short = input$mavg_short,
+            mavg_long  = input$mavg_long
+        )
+    })
+    
     
 }
 
