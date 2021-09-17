@@ -167,12 +167,12 @@ server <- function(input, output, session) {
     # 1.2.Stock Symbol ----
     stock_symbol <- eventReactive(input$analyze, {
         get_symbol_from_user_input(input$stock_selection)
-    })
+    }, ignoreNULL = FALSE)
     
     # 1.3. User Input ----
     stock_selection_triggered <- eventReactive(input$analyze, {
         input$stock_selection
-    })
+    }, ignoreNULL = FALSE)
     
     # 1.4. Apply & Save Settings ----
     mavg_short <- eventReactive(input$apply_and_save, {
@@ -189,9 +189,11 @@ server <- function(input, output, session) {
         selected_tab <- input$tab_panel_stock_chart
       } else {
         # Tab panel not built yet
-        selected_tab <- "Last analysis"
+        selected_tab <- NULL
       }
+      
       selected_tab
+      
     }, ignoreNULL = FALSE)
     
     # 1.5. Get Stock Data ----
