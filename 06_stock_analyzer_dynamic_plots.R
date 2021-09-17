@@ -19,6 +19,7 @@ library(tidyverse)
 
 source(file = "00_scripts/stock_analysis_functions.R")
 source(file = "00_scripts/info_card.R")
+source(file = "00_scripts/panel_card.R")
 source(file = "00_scripts/generate_favorite_cards.R")
 
 stock_list_tbl <- get_stock_list("SP500")
@@ -83,7 +84,7 @@ ui <- navbarPage(
             class = "container",
             id = "application_ui",
             
-            # 3.2. USER INPUTS ----
+            # 3.1. USER INPUTS ----
             column(
                 width = 4, 
                 wellPanel(
@@ -115,7 +116,8 @@ ui <- navbarPage(
                         id = "input_settings",
                         hr(),
                         sliderInput(inputId = "mavg_short", label = "Short Moving Average", value = 20, min = 5, max = 40),
-                        sliderInput(inputId = "mavg_long", label = "Long Moving Average", value = 50, min = 50, max = 120)
+                        sliderInput(inputId = "mavg_long", label = "Long Moving Average", value = 50, min = 50, max = 120),
+                        actionButton(inputId = "apply_and_save", label = "Apply & Save", icon = icon("save"))
                     ) %>% hidden()
                 )
             ),
@@ -131,19 +133,22 @@ ui <- navbarPage(
         
         # 4.0 ANALYST COMMENTARY ----
         div(
-            class = "container",
-            id = "commentary",
-            column(
-                width = 12,
-                div(
-                    class = "panel",
-                    div(class = "panel-header", h4("Analyst Commentary")),
-                    div(
-                        class = "panel-body",
-                        textOutput(outputId = "analyst_commentary")
-                    )
-                )
+          class = "container",
+          id = "commentary",
+          column(
+            width = 12,
+            div(
+              class = "panel",
+              div(
+                class = "panel-header", 
+                h4("Analyst Commentary")
+              ),
+              div(
+                class = "panel-body",
+                textOutput(outputId = "analyst_commentary")
+              )
             )
+          )
         )
     )
     
@@ -152,47 +157,54 @@ ui <- navbarPage(
 # SERVER ----
 server <- function(input, output, session) {
     
-    # Toggle Input Settings ----
+    # 1.0. SETTINGS
+  
+    # 1.1. Toggle Input Settings ----
     observeEvent(input$settings_toggle, {
         toggle(id = "input_settings", anim = TRUE)
     })
     
-    # Stock Symbol ----
+    # 1.2.Stock Symbol ----
     stock_symbol <- eventReactive(input$analyze, {
         get_symbol_from_user_input(input$stock_selection)
-    }, ignoreNULL = FALSE)
+    })
     
-    # User Input ----
+    # 1.3. User Input ----
     stock_selection_triggered <- eventReactive(input$analyze, {
         input$stock_selection
+    })
+    
+    # 1.4. Apply & Save Settings ----
+    mavg_short <- eventReactive(input$apply_and_save, {
+      input$mavg_short
     }, ignoreNULL = FALSE)
-
-    # Get Stock Data ----
+    
+    mavg_long <- eventReactive(input$apply_and_save, {
+      input$mavg_long
+    }, ignoreNULL = FALSE)
+    
+    selected_tab <- eventReactive(input$apply_and_save, {
+      if (is.character(input$tab_panel_stock_chart)) {
+        # Tab already selected
+        selected_tab <- input$tab_panel_stock_chart
+      } else {
+        # Tab panel not built yet
+        selected_tab <- "Last analysis"
+      }
+      selected_tab
+    }, ignoreNULL = FALSE)
+    
+    # 1.5. Get Stock Data ----
     stock_data_tbl <- reactive({
         stock_symbol() %>% 
             get_stock_data(
                 from = today() - days(180), 
                 to   = today(),
-                mavg_short = input$mavg_short,
-                mavg_long  = input$mavg_long)
+                mavg_short = mavg_short(),
+                mavg_long  = mavg_long())
     })
     
-    # Plot Header ----
-    output$plot_header <- renderText({
-        stock_selection_triggered()
-    })
-    
-    # Plotly Plot ----
-    output$plotly_plot <- renderPlotly({
-        stock_data_tbl() %>% plot_stock_data()
-    })
-    
-    # Generate Commentary ----
-    output$analyst_commentary <- renderText({
-        generate_commentary(data = stock_data_tbl(), user_input = stock_selection_triggered())
-    })
-    
-    # 2.0 FAVORITES ----
+    # 2.0 FAVORITE CARDS ----
     
     # 2.1 Reactive Values - User Favorites ----
     reactive_values <- reactiveValues()
@@ -212,8 +224,8 @@ server <- function(input, output, session) {
                 favorites  = reactive_values$favorites_list,
                 from       = today() - days(180),
                 to         = today(),
-                mavg_short = input$mavg_short,
-                mavg_long  = input$mavg_long
+                mavg_short = mavg_short(),
+                mavg_long  = mavg_long()
             )
         }
         
@@ -270,67 +282,73 @@ server <- function(input, output, session) {
         shinyjs::toggle(id = "favorite_card_section", anim = TRUE, animType = "slide")
     })
     
-    # 3.0. FAVORITE PLOTS
+    # 3.0. FAVORITE PLOTS ----
+    
+    # 3.1. Plot Header ----
+    output$plot_header <- renderText({
+      stock_selection_triggered()
+    })
+    
+    # 3.2. Plotly Plot ----
+    output$plotly_plot <- renderPlotly({
+      stock_data_tbl() %>% plot_stock_data()
+    })
+    
+    # 3.3. Favorite Plots ----
     output$stock_charts <- renderUI(
-        {
-            
-            tab_panel_1 <- tabPanel(
-                title = "Last analysis",
-                div(
-                    class = "panel", 
-                    div(
-                        class = "panel-header",
-                        h4(stock_symbol())
-                    ),
-                    div(
-                        class = "panel-body",
-                        plotlyOutput(outputId = "plotly_plot")
-                    )
+      {
+        
+        tab_panel_1 <- tabPanel(
+          title = "Last analysis",
+          panel_card(
+            title = stock_symbol(),
+            plotlyOutput(outputId = "plotly_plot")
+          )
+        )
+        
+        favorite_tab_panels <- NULL
+        
+        if (length(reactive_values$favorites_list) > 0) {
+          favorite_tab_panels <- reactive_values$favorites_list %>%
+            map(.f = function(x) {
+              tabPanel(
+                title = x,
+                panel_card(
+                  title = x,
+                  x %>% 
+                    get_stock_data() %>%
+                    plot_stock_data()
                 )
-            )
-            
-            favorite_tab_panels <- NULL
-            
-            if (length(reactive_values$favorites_list) > 0) {
-                favorite_tab_panels <- reactive_values$favorites_list %>%
-                    map(.f = function(x) {
-                        tabPanel(
-                            title = x,
-                            div(
-                                class = "panel", 
-                                div(
-                                    class = "panel-header",
-                                    h4(x)
-                                ),
-                                div(
-                                    class = "panel-body",
-                                    x %>% 
-                                        get_stock_data() %>%
-                                        plot_stock_data()
-                                )
-                            )
-                        )
-                    })
-            }
-            
-            # Building the Tabset Panel ----
-            
-            do.call(
-                what = tabsetPanel,
-                args = list(tab_panel_1) %>% 
-                    append(favorite_tab_panels) %>%
-                    append(list(id = "tab_panel_stock_chart", type = "pills"))
-            )
-            
-            # tabsetPanel(
-            #     id = "tab_panel_stock_chart",
-            #     type = "pills",
-            #     tab_panel_1,
-            #     favorite_tab_panels
-            # )
-            
+              )
+            })
         }
+        
+        # 3.4. Building the Tabset Panel ----
+        
+        do.call(
+          what = tabsetPanel,
+          args = list(tab_panel_1) %>% 
+            append(favorite_tab_panels) %>%
+            append(list(id = "tab_panel_stock_chart", type = "pills", selected = selected_tab()))
+        )
+        
+        # tabsetPanel(
+        #     id = "tab_panel_stock_chart",
+        #     type = "pills",
+        #     tab_panel_1,
+        #     favorite_tab_panels
+        # )
+        
+        
+      }
     )
+    
+    # 4.0. COMMENTARY ----
+    
+    # Generate Commentary ----
+    output$analyst_commentary <- renderText({
+      generate_commentary(data = stock_data_tbl(), user_input = stock_selection_triggered())
+    })
     
 }
 
