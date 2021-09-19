@@ -28,8 +28,10 @@ ui <- navbarPage(
         title = "Login Module",
         
         shinyauthr::loginUI(
-          id = "login_3"
+          id = "login_3", error_message = "Wrong username and/or password"
         ),
+        
+        verbatimTextOutput(outputId = "creds"),
         
         uiOutput(outputId = "web_page")
         
@@ -109,19 +111,24 @@ server <- function(input, output, session) {
       log_out = reactive(logout_init())
     )
     
-    user_auth <- reactive(
-      {credentials()$user_auth}
-    )
+    user_auth <- reactive({
+      credentials()$user_auth
+    })
     
-    user_data <- reactive(
-      {credentials()$info}
-    )
+    user_data <- reactive({
+      credentials()$info
+    })
     
     logout_init <- callModule(
-      module = shinyauthr::logout(),
+      module = shinyauthr::logout, 
       id = "logout",
       active = reactive(user_auth())
-      )
+    )
+    
+    output$creds <- renderPrint({
+      credentials()
+    })
+    
     
     output$web_page <- renderUI({
       
@@ -137,41 +144,35 @@ server <- function(input, output, session) {
             class = "well",
             h2(class = "text-center", "Please Login"),
             
-            textInput(
-              inputId = "user_input",
-              label = tagList(icon("user"), "User name"),
-              placeholder = "Enter User Name"
-            ),
-            passwordInput(
-              inputId = "password",
-              label = tagList(icon("unlock-alt"), "Password"),
-              placeholder = "Enter Password"),
+            textInput(inputId     = "user_name", 
+                      label       = tagList(icon("user"), "User Name"), 
+                      placeholder = "Enter user name"),
+            
+            passwordInput(inputId      = "password",
+                          label       = tagList(icon("unlock-alt"), "Password"),
+                          placeholder = "Enter password"),
             
             div(
               class = "text-center",
-              
-              actionButton(
-                inputId = "login_button",
-                label = "Log in",
-                class = "btn-primary",
-                style = "color:white;")
+              actionButton(inputId = "login_button", "Log in", class = "btn-primary", style = "color:white;")
             )
           )
         ),
         
-        uiOutput(
-          outputId = "display_content"
-        ),
+        uiOutput(outputId = "display_content"),
         
         h2("Using A Module"),
         
-        login_ui(id = "login_2", title = "Please login (Modularized code)"),
+        login_ui(id = "login_2", "Modular Login"),
         
-        uiOutput(
-          outputId = "display_content_2"
-          )
-        )
-      })
-    }
+        uiOutput(outputId = "display_content_2"),
+        
+        h2('Using Shiny Auth')
+        
+        # TODO
+      )
+      
+    })
+}
 
 shinyApp(ui, server)
