@@ -16,6 +16,8 @@ library(shinyjs)
 
 library(shinyauthr) # devtools::install_github("business-science/shinyauthr", force = TRUE)
 
+source("./modules/module_login.R")
+
 ui <- navbarPage(
     title = "Module Training", 
     theme = shinytheme("flatly"),
@@ -25,46 +27,12 @@ ui <- navbarPage(
         useShinyjs(),
         title = "Login Module",
         
-        h2("No Module"),
-        
-        div(
-          id = "login",
-          style = "width: 500px; max-width: 100%; margin: 0 auto; padding: 20px;",
-          div(
-            class = "well",
-            h2(class = "text-center", "Please Login"),
-            
-            textInput(
-              inputId = "user_input",
-              label = tagList(icon("user"), "User name"),
-              placeholder = "Enter User Name"
-            ),
-            passwordInput(
-              inputId = "password",
-              label = tagList(icon("unlock-alt"), "Password"),
-              placeholder = "Enter Password"),
-            
-            div(
-              class = "text-center",
-              
-              actionButton(
-                inputId = "login_button",
-                label = "Log in",
-                class = "btn-primary",
-                style = "color:white;")
-            )
-          )
+        shinyauthr::loginUI(
+          id = "login_3"
         ),
         
-        uiOutput(
-          outputId = "display_content"
-        ),
+        uiOutput(outputId = "web_page")
         
-        h2("Using A Module"),
-        
-        # TODO
-        
-        h2('Using Shiny Auth')
     )
 )
 
@@ -106,11 +74,104 @@ server <- function(input, output, session) {
     })
     
     # MODULE ----
+    validate_2 <- 
+      callModule(validate_pwd, 
+                 id = "login_2", 
+                 data = user_base_tbl, 
+                 user_col = user_name, 
+                 pwd_col = password)
     
+    output$display_content_2 <- renderUI({
+      
+      req(validate_2())
+      
+      div(
+        id = "success",
+        class = "well",
+        h1(
+          class = "page-header", 
+          "Stock Analyzer (VALIDATE MODULE)",
+          tags$small("by Business Science")),
+        p(class = "lead",
+          "Page content")
+      )
+      
+    })
     
     # SHINYAUTHR ----
     
+    credentials <- callModule(
+      module = shinyauthr::login,
+      id = "login_3",
+      data = user_base_tbl, 
+      user_col = user_name,
+      pwd_col = password, 
+      log_out = reactive(logout_init())
+    )
     
-}
+    user_auth <- reactive(
+      {credentials()$user_auth}
+    )
+    
+    user_data <- reactive(
+      {credentials()$info}
+    )
+    
+    logout_init <- callModule(
+      module = shinyauthr::logout(),
+      id = "logout",
+      active = reactive(user_auth())
+      )
+    
+    output$web_page <- renderUI({
+      
+      req(user_auth())
+      
+      tagList(
+        h2("No Module"),
+        
+        div(
+          id = "login",
+          style = "width: 500px; max-width: 100%; margin: 0 auto; padding: 20px;",
+          div(
+            class = "well",
+            h2(class = "text-center", "Please Login"),
+            
+            textInput(
+              inputId = "user_input",
+              label = tagList(icon("user"), "User name"),
+              placeholder = "Enter User Name"
+            ),
+            passwordInput(
+              inputId = "password",
+              label = tagList(icon("unlock-alt"), "Password"),
+              placeholder = "Enter Password"),
+            
+            div(
+              class = "text-center",
+              
+              actionButton(
+                inputId = "login_button",
+                label = "Log in",
+                class = "btn-primary",
+                style = "color:white;")
+            )
+          )
+        ),
+        
+        uiOutput(
+          outputId = "display_content"
+        ),
+        
+        h2("Using A Module"),
+        
+        login_ui(id = "login_2", title = "Please login (Modularized code)"),
+        
+        uiOutput(
+          outputId = "display_content_2"
+          )
+        )
+      })
+    }
 
 shinyApp(ui, server)
